@@ -80,30 +80,6 @@
           sourceRoot = "./source";
 
           nativeBuildInputs = with pkgs; [
-            # ((kokkos.override {
-            #   stdenv = pkgs.stdenv;
-            # }).overrideAttrs
-            #   (attrs: {
-            #     nativeBuildInputs = attrs.nativeBuildInputs ++ [
-            #       cudaPackages.cudatoolkit
-            #       cudaPackages.cuda_cudart
-            #       cudaPackages.cuda_nvcc
-            #       llvmPackages.openmp
-            #       mpi
-            #     ];
-            #     cmakeFlags = with pkgs.lib;attrs.cmakeFlags ++ [
-            #       (cmakeBool "Kokkos_ENABLE_CUDA" true)
-            #       (cmakeBool "Kokkos_ENABLE_OPENMP" true)
-            #       (cmakeBool "Kokkos_ARCH_${pkgs.lib.strings.toUpper kokkosCudaArch}" true)
-            #       (cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/bin/nvcc_wrapper")
-            #     ];
-            #     patchPhase = ''
-            #       patchShebangs --build /build/source/bin/*
-            #     '';
-            #     hardeningDisable = [
-            #       "zerocallusedregs"
-            #     ];
-            #   }))
             cmake
             gitMinimal
             pkg-config
@@ -111,6 +87,7 @@
             cudaPackages.cuda_nvcc
             mpi
             autoAddDriverRunpath
+            makeWrapper
           ];
 
           buildInputs = with pkgs; [
