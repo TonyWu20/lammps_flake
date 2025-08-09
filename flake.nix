@@ -49,13 +49,11 @@
           "GPU_API=CUDA"
           "CUDA_MPS_SUPPORT=on"
         ];
-        kokkosOptions = [
-          "ARCH_NATIVE=on"
-          "ARCH_${pkgs.lib.strings.toUpper kokkosCudaArch}=on"
-          "BINARY_DIR=${pkgs.kokkos}"
-          # "SOURCE_DIR=${pkgs.kokkos}"
-          "ENABLE_CUDA=yes"
-          "ENABLE_OPENMP=yes"
+        kokkosOptions = with pkgs.lib;[
+          (cmakeBool "Kokkos_ENABLE_CUDA" true)
+          (cmakeBool "Kokkos_ENABLE_OPENMP" true)
+          (cmakeBool "Kokkos_ARCH_${pkgs.lib.strings.toUpper kokkosCudaArch}" true)
+          (cmakeBool "Kokkos_ARCH_NATIVE" true)
         ];
       };
 
@@ -82,7 +80,30 @@
           sourceRoot = "./source";
 
           nativeBuildInputs = with pkgs; [
-            kokkos
+            # ((kokkos.override {
+            #   stdenv = pkgs.stdenv;
+            # }).overrideAttrs
+            #   (attrs: {
+            #     nativeBuildInputs = attrs.nativeBuildInputs ++ [
+            #       cudaPackages.cudatoolkit
+            #       cudaPackages.cuda_cudart
+            #       cudaPackages.cuda_nvcc
+            #       llvmPackages.openmp
+            #       mpi
+            #     ];
+            #     cmakeFlags = with pkgs.lib;attrs.cmakeFlags ++ [
+            #       (cmakeBool "Kokkos_ENABLE_CUDA" true)
+            #       (cmakeBool "Kokkos_ENABLE_OPENMP" true)
+            #       (cmakeBool "Kokkos_ARCH_${pkgs.lib.strings.toUpper kokkosCudaArch}" true)
+            #       (cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/bin/nvcc_wrapper")
+            #     ];
+            #     patchPhase = ''
+            #       patchShebangs --build /build/source/bin/*
+            #     '';
+            #     hardeningDisable = [
+            #       "zerocallusedregs"
+            #     ];
+            #   }))
             cmake
             gitMinimal
             pkg-config
@@ -117,7 +138,7 @@
 
           enableParallelBuilding = true;
 
-          phases = [ "unpackPhase" "patchPhase" "configurePhase" "buildPhase" "installPhase" ];
+          phases = [ "unpackPhase" "patchPhase" "configurePhase" "buildPhase" ];
 
           # Convert package list to cmake flags
           packageFlags = builtins.map (pkg: pkgs.lib.cmakeBool "PKG_${(pkgs.lib.strings.toUpper pkg)}" true) packages;
@@ -126,15 +147,17 @@
           gpuFlags = builtins.map (opt: "-D${opt}") gpuExtraOptions;
 
           # Convert kokkos options to cmake flags  
-          kokkosFlags = builtins.map (opt: "-DKokkos_${opt}") kokkosOptions;
+          kokkosFlags = kokkosOptions
+            ++ [
+            # (lib.cmakeBool "EXTERNAL_KOKKOS" true)
+            (lib.cmakeOptionType "string" "FFT_KOKKOS" "CUFFT")
+          ];
 
           # Combine all flags
           cmakeFlags = packageFlags ++ gpuFlags ++ kokkosFlags ++ [
-            "-DBUILD_SHARED_LIBS=ON"
-            # "-DCMAKE_CUDA_COMPILER=${pkgs.cudaPackages.cudatoolkit}/bin/nvcc"
-            "-DCMAKE_CXX_COMPILER=${pkgs.kokkos}/bin/nvcc_wrapper"
-            "-DEXTERNAL_KOKKOS=ON"
-            (lib.cmakeOptionType "string" "CUDA_NVCC_FLAGS" "-Wno-deprecated-gpu-targets")
+            (lib.cmakeBool "BUILD_SHARED_LIBS" true)
+            (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/lib/kokkos/bin/nvcc_wrapper")
+            (lib.cmakeOptionType "string" "CMAKE_CXX_FLAGS" "-Wno-deprecated-gpu-targets")
           ];
 
           env = {
@@ -166,7 +189,7 @@
             #runHook postBuild
           '';
           patchPhase = ''
-            patchShebangs --build ${sourceRoot}/lib/kokkos/bin/*
+            patchShebangs --build /build/source/lib/kokkos/bin/*
           '';
 
         };
