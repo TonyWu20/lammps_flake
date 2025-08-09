@@ -138,7 +138,7 @@
 
           enableParallelBuilding = true;
 
-          phases = [ "unpackPhase" "patchPhase" "configurePhase" "buildPhase" ];
+          phases = [ "unpackPhase" "patchPhase" "configurePhase" "buildPhase" "fixupPhase" ];
 
           # Convert package list to cmake flags
           packageFlags = builtins.map (pkg: pkgs.lib.cmakeBool "PKG_${(pkgs.lib.strings.toUpper pkg)}" true) packages;
@@ -169,29 +169,35 @@
             LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudatoolkit}/lib64:$LIBRARY_PATH";
             NIX_ENFORCE_NO_NATIVE = 0;
           };
-          NIX_LDFLAGS = "-L${pkgs.cudaPackages.cudatoolkit}/lib -L${pkgs.cudaPackages.cudatoolkit}/lib64";
-          NIX_CFLAGS_COMPILE = "-I${pkgs.cudaPackages.cudatoolkit}/include";
+          cudaLibs = with pkgs;[
+            cudaPackages.cuda_cudart
+            cudaPackages.libcufft
+          ];
+          wrapperOptions = with pkgs;[
+            # ollama embeds llama-cpp binaries which actually run the ai models
+            # these llama-cpp binaries are unaffected by the ollama binary's DT_RUNPATH
+            # LD_LIBRARY_PATH is temporarily required to use the gpu
+            # until these llama-cpp binaries can have their runpath patched
+            "--suffix LD_LIBRARY_PATH : '${addDriverRunpath.driverLink}/lib'"
+            "--suffix LD_LIBRARY_PATH : '${lib.makeLibraryPath (map lib.getLib cudaLibs)}'"
+          ];
+          wrapperArgs = builtins.concatStringsSep " " wrapperOptions;
 
-          # configurePhase = ''
-          #   #runHook preConfigure
-          #   
-          #   # Create build directory
-          #   mkdir -p build
-          #   cd build
-          #   
-          #   # Configure with CMake
-          #   cmake ../cmake ${pkgs.lib.escapeShellArgs cmakeFlags}
-          # '';
+          patchPhase = ''
+            patchShebangs --build /build/source/lib/kokkos/bin/*
+          '';
 
           buildPhase = ''
             #runHook preBuild
             cmake --build . --target install -j$NIX_BUILD_CORES
             #runHook postBuild
           '';
-          patchPhase = ''
-            patchShebangs --build /build/source/lib/kokkos/bin/*
-          '';
 
+          postFixup =
+            # expose runtime libraries necessary to use the gpu
+            ''
+              wrapProgram "$out/bin/lmp" ${wrapperArgs}
+            '';
         };
 
       # Create the default package with default configuration
