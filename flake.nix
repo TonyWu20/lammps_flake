@@ -43,6 +43,7 @@
           "meam"
           "reaxff"
           "gpu"
+          "openmp"
         ];
         gpuExtraOptions = [
           "GPU_ARCH=${cudaArch}"
