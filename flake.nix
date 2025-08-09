@@ -11,6 +11,7 @@
         config.cudaSupport = true;
         inherit system;
       };
+      lib = pkgs.lib;
 
       # Default configuration
       defaultConfig = rec {
@@ -133,6 +134,7 @@
             # "-DCMAKE_CUDA_COMPILER=${pkgs.cudaPackages.cudatoolkit}/bin/nvcc"
             "-DCMAKE_CXX_COMPILER=${pkgs.kokkos}/bin/nvcc_wrapper"
             "-DEXTERNAL_KOKKOS=ON"
+            (lib.cmakeOptionType "string" "CUDA_NVCC_FLAGS" "-Wno-deprecated-gpu-targets")
           ];
 
           env = {
