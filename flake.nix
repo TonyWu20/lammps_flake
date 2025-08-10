@@ -101,7 +101,7 @@
             pkg-config
             mpi
           ] ++
-          (lib.optional (system == "x86_64-linux") [
+          (lib.optionals (system == "x86_64-linux") [
             cudaPackages.cudatoolkit
             cudaPackages.cuda_nvcc
             autoAddDriverRunpath
@@ -116,7 +116,7 @@
             zlib
             zstd
           ] ++
-          (lib.optional (system == "x86_64-linux") [
+          (lib.optionals (system == "x86_64-linux") [
             cudaPackages.cudatoolkit
             cudaPackages.cuda_cudart
             cudaPackages.libcufft
@@ -128,7 +128,7 @@
             blas
             mpi
           ] ++
-          (lib.optional (system == "x86_64-linux") [
+          (lib.optionals (system == "x86_64-linux") [
             cudaPackages.cudatoolkit
             cudaPackages.cuda_cudart
             cudaPackages.libcufft
@@ -150,7 +150,7 @@
           # Convert kokkos options to cmake flags  
           kokkosFlags = kokkosOptions
             ++
-            (lib.optional (system == "x86_64-linux")
+            (lib.optionals (system == "x86_64-linux")
               [
                 (lib.cmakeOptionType "string" "FFT_KOKKOS" "CUFFT")
                 (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/lib/kokkos/bin/nvcc_wrapper")
@@ -164,8 +164,8 @@
 
           env = {
             NIX_ENFORCE_NO_NATIVE = 0;
-          } ++
-          (pkgs.lib.optional (system == "x86_64-linux") {
+          } //
+          (pkgs.lib.optionalAttrs (system == "x86_64-linux") {
             CUDA_PATH = "${pkgs.cudaPackages.cudatoolkit}";
             CUDA_HOME = "${pkgs.cudaPackages.cudatoolkit}";
             LD_LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudatoolkit}/lib64:$LD_LIBRARY_PATH";
@@ -219,7 +219,6 @@
     in
     {
       packages.x86_64-linux = {
-        system = "x86_64-linux";
         default = lammps;
         # You can also expose custom versions
         lammps-sm90 = lammpsWithConfig { cudaArch = "sm_90"; kokkosCudaArch = "hopper90"; };
