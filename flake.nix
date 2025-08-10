@@ -246,8 +246,5 @@
             inherit pkgs;
           };
         };
-      overlays.default = final: prev: {
-        lammps = lammpsWithConfig { pkgs = final.pkgs; gpuExtraOptions = final.gpuExtraOptions; kokkosOptions = final.kokkosOptions; };
-      };
     };
 }
