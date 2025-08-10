@@ -102,14 +102,20 @@
             fftw
             lapack
             blas
-            (if system == "x86_64-linux" then mpi else llvmPackages.openmp)
           ] ++
           (lib.optionals enableCUDA [
             cudaPackages.cudatoolkit
             cudaPackages.cuda_cudart
             cudaPackages.libcufft
           ]
-          );
+          ) ++
+          (lib.optionals (system == "x86_64-linux") [
+            mpi
+          ]) ++
+          (lib.optionals (system == "aarch64-darwin") [
+            llvmPackages.openmp
+          ])
+          ;
 
           cmakeDir = "../cmake";
 
