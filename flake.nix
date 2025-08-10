@@ -156,8 +156,8 @@
             PATH = "${pkgs.cudaPackages.cudatoolkit}/bin:$PATH";
           }
           );
-          cudaLibs = with pkgs.lib;
-            (optionals enableCUDA [
+          cudaLibs = with pkgs;
+            (lib.optionals enableCUDA [
               cudaPackages.cuda_cudart
               cudaPackages.libcufft
             ]);
@@ -200,14 +200,14 @@
             enableCUDA = true;
           };
           gpuOptions = cudaArch: [
-            "GPU_ARCH=${cudaArch?"sm_61"}"
+            "GPU_ARCH=${cudaArch}"
             "GPU_API=CUDA"
             "CUDA_MPS_SUPPORT=on"
           ];
           setKokkosOptions = kokkosCudaArch: with pkgs.lib;[
             (cmakeBool "Kokkos_ENABLE_OPENMP" true)
             (cmakeBool "Kokkos_ENABLE_CUDA" true)
-            (cmakeBool "Kokkos_ARCH_${strings.toUpper kokkosCudaArch ? "pascal61"}" true)
+            (cmakeBool "Kokkos_ARCH_${strings.toUpper kokkosCudaArch}" true)
             (cmakeBool "Kokkos_ARCH_NATIVE" true)
           ];
         in
@@ -218,7 +218,15 @@
             kokkosCudaArch = "pascal61";
             gpuExtraOptions = gpuOptions cudaArch;
             kokkosOptions = setKokkosOptions kokkosCudaArch;
-            pkgs = pkgs;
+            inherit pkgs;
+          };
+          sm_90 = lammpsWithConfig rec {
+            enableCUDA = true;
+            cudaArch = "sm_90";
+            kokkosCudaArch = "hopper90";
+            gpuExtraOptions = gpuOptions cudaArch;
+            kokkosOptions = setKokkosOptions kokkosCudaArch;
+            inherit pkgs;
           };
         };
       packages.aarch64-darwin =
