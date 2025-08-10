@@ -247,45 +247,7 @@
           };
         };
       overlays.default = final: prev: {
-        lammps = lammpsWithConfig;
+        lammps = lammpsWithConfig { pkgs = final.pkgs; gpuExtraOptions = final.gpuExtraOptions; kokkosOptions = final.kokkosOptions; };
       };
     };
 }
-
-#   # Create the default package with default configuration
-#   lammps = lammpsWithConfig { };
-
-#   # Create a more flexible overlay that allows configuration
-#   overlay = final: prev: {
-#     lammps = lammps;
-#     lammpsCustom = lammpsWithConfig;
-#   };
-# in
-# {
-#   packages.x86_64-linux = {
-#     default = lammps;
-#     # You can also expose custom versions
-#     lammps-sm90 = lammpsWithConfig { cudaArch = "sm_90"; kokkosCudaArch = "hopper90"; };
-#     lammps-sm80 = lammpsWithConfig { cudaArch = "sm_80"; kokkosCudaArch = "ampere80"; };
-#     lammps-sm75 = lammpsWithConfig { cudaArch = "sm_75"; kokkosCudaArch = "turing75"; };
-#     lammps-sm70 = lammpsWithConfig { cudaArch = "sm_70"; kokkosCudaArch = "volta70"; };
-#   };
-#   packages.aarch64-darwin = {
-#     default = lammps {
-#       system = "aarch64-darwin";
-#     };
-#   };
-
-#   # Overlay for reuse
-#   overlays.default = overlay;
-
-#   # Example usage in other flakes:
-#   # Let users customize via overlay
-#   apps.${system} = {
-#     # Example app that uses custom configuration
-#     lammps = {
-#       type = "app";
-#       program = "${lammps}/bin/lmp";
-#     };
-#   };
-# };
