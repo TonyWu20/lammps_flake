@@ -5,81 +5,48 @@
   };
   outputs = { nixpkgs, ... }:
     let
-      system = "x86_64-linux";
-      isAarch64Darwin = pkgs.stdenv.isDarwin && pkgs.stdenv.isAarch64;
-      pkgs = import nixpkgs {
-        config.allowUnfree = true;
-        config.cudaSupport = !isAarch64Darwin;
+      pkgsFor = { system, enableCUDA }: import nixpkgs {
         inherit system;
+        config.allowUnfree = true;
+        config.cudaSupport = enableCUDA;
       };
-      lib = pkgs.lib;
-
-      # Default configuration
-      defaultConfig = {
-        packages = [
-          "asphere"
-          "body"
-          "class2"
-          "colloid"
-          "compress"
-          "coreshell"
-          "dipole"
-          "granular"
-          "kspace"
-          "manybody"
-          "mc"
-          "misc"
-          "molecule"
-          "opt"
-          "peri"
-          "qeq"
-          "replica"
-          "rigid"
-          "shock"
-          "srd"
-          "kokkos"
-          "extra-fix"
-          "meam"
-          "reaxff"
-          "gpu"
-          "openmp"
-        ];
-        x86_64-linux = rec {
-          cudaArch = "sm_61"; # Default CUDA architecture
-          kokkosCudaArch = "pascal61";
-          gpuExtraOptions = [
-            "GPU_ARCH=${cudaArch}"
-            "GPU_API=CUDA"
-            "CUDA_MPS_SUPPORT=on"
-          ];
-          kokkosOptions = with pkgs.lib;[
-            (cmakeBool "Kokkos_ENABLE_OPENMP" true)
-            (cmakeBool "Kokkos_ENABLE_CUDA" true)
-            (cmakeBool "Kokkos_ARCH_${pkgs.lib.strings.toUpper kokkosCudaArch}" true)
-            (cmakeBool "Kokkos_ARCH_NATIVE" true)
-          ];
-        };
-        aarch64-darwin = {
-          cudaArch = null; # Default CUDA architecture
-          kokkosCudaArch = null;
-          gpuExtraOptions = [
-            "GPU_ARCH=opencl"
-          ];
-          kokkosOptions = with pkgs.lib;[
-            (cmakeBool "Kokkos_ENABLE_OPENMP" true)
-            (cmakeBool "Kokkos_ARCH_NATIVE" true)
-          ];
-        };
-      };
-
-      # Main lammps derivation with configurable parameters
+      lmpPackages = [
+        "asphere"
+        "body"
+        "class2"
+        "colloid"
+        "compress"
+        "coreshell"
+        "dipole"
+        "granular"
+        "kspace"
+        "manybody"
+        "mc"
+        "misc"
+        "molecule"
+        "opt"
+        "peri"
+        "qeq"
+        "replica"
+        "rigid"
+        "shock"
+        "srd"
+        "kokkos"
+        "extra-fix"
+        "meam"
+        "reaxff"
+        "gpu"
+        "openmp"
+      ];
       lammpsWithConfig =
         { system ? "x86_64-linux"
-        , cudaArch ? defaultConfig.${system}.cudaArch
-        , kokkosCudaArch ? defaultConfig.${system}.kokkosCudaArch
-        , packages ? defaultConfig.packages
-        , gpuExtraOptions ? defaultConfig.${system}.gpuExtraOptions
-        , kokkosOptions ? defaultConfig.${system}.kokkosOptions
+        , enableCUDA ? true
+        , cudaArch ? "sm_61"
+        , kokkosCudaArch ? "pascal_61"
+        , packages ? lmpPackages
+        , gpuExtraOptions
+        , kokkosOptions
+        , pkgs
         , ...
         }:
         pkgs.stdenv.mkDerivation rec {
@@ -99,14 +66,23 @@
             cmake
             gitMinimal
             pkg-config
-            mpi
           ] ++
-          (lib.optionals (system == "x86_64-linux") [
+          (lib.optionals enableCUDA [
             cudaPackages.cudatoolkit
             cudaPackages.cuda_nvcc
             autoAddDriverRunpath
             makeWrapper
-          ]);
+          ]) ++
+          (lib.optionals (system == "x86_64-linux") [
+            mpi
+          ])
+          ++ (
+            lib.optionals (system == "aarch64-darwin") [
+              llvmPackages.openmp
+              darwin.DarwinTools
+            ]
+          )
+          ;
 
           buildInputs = with pkgs; [
             fftw
@@ -116,7 +92,7 @@
             zlib
             zstd
           ] ++
-          (lib.optionals (system == "x86_64-linux") [
+          (lib.optionals enableCUDA [
             cudaPackages.cudatoolkit
             cudaPackages.cuda_cudart
             cudaPackages.libcufft
@@ -126,9 +102,9 @@
             fftw
             lapack
             blas
-            mpi
+            (if system == "x86_64-linux" then mpi else llvmPackages.openmp)
           ] ++
-          (lib.optionals (system == "x86_64-linux") [
+          (lib.optionals enableCUDA [
             cudaPackages.cudatoolkit
             cudaPackages.cuda_cudart
             cudaPackages.libcufft
@@ -148,9 +124,9 @@
           gpuFlags = builtins.map (opt: "-D${opt}") gpuExtraOptions;
 
           # Convert kokkos options to cmake flags  
-          kokkosFlags = kokkosOptions
+          kokkosFlags = with pkgs; kokkosOptions
             ++
-            (lib.optionals (system == "x86_64-linux")
+            (lib.optionals enableCUDA
               [
                 (lib.cmakeOptionType "string" "FFT_KOKKOS" "CUFFT")
                 (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/lib/kokkos/bin/nvcc_wrapper")
@@ -158,14 +134,15 @@
               ]);
 
           # Combine all flags
-          cmakeFlags = packageFlags ++ gpuFlags ++ kokkosFlags ++ [
+          cmakeFlags = with pkgs;packageFlags ++ gpuFlags ++ kokkosFlags ++ [
             (lib.cmakeBool "BUILD_SHARED_LIBS" true)
+            (lib.cmakeBool "BUILD_OMP" true)
           ];
 
           env = {
             NIX_ENFORCE_NO_NATIVE = 0;
           } //
-          (pkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          (pkgs.lib.optionalAttrs enableCUDA {
             CUDA_PATH = "${pkgs.cudaPackages.cudatoolkit}";
             CUDA_HOME = "${pkgs.cudaPackages.cudatoolkit}";
             LD_LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudatoolkit}/lib64:$LD_LIBRARY_PATH";
@@ -173,10 +150,11 @@
             PATH = "${pkgs.cudaPackages.cudatoolkit}/bin:$PATH";
           }
           );
-          cudaLibs = with pkgs;[
-            cudaPackages.cuda_cudart
-            cudaPackages.libcufft
-          ];
+          cudaLibs = with pkgs.lib;
+            (optionals enableCUDA [
+              cudaPackages.cuda_cudart
+              cudaPackages.libcufft
+            ]);
           wrapperOptions = with pkgs;[
             # ollama embeds llama-cpp binaries which actually run the ai models
             # these llama-cpp binaries are unaffected by the ollama binary's DT_RUNPATH
@@ -199,7 +177,7 @@
 
           postFixup =
             ''
-              ${lib.optionalString (system == "x86_64-linux") 
+              ${pkgs.lib.optionalString enableCUDA
                  # expose runtime libraries necessary to use the gpu
                  ''
                    wrapProgram "$out/bin/lmp" ${wrapperArgs}
@@ -207,42 +185,101 @@
               }
             '';
         };
-
-      # Create the default package with default configuration
-      lammps = lammpsWithConfig { };
-
-      # Create a more flexible overlay that allows configuration
-      overlay = final: prev: {
-        lammps = lammps;
-        lammpsCustom = lammpsWithConfig;
-      };
     in
     {
-      packages.x86_64-linux = {
-        default = lammps;
-        # You can also expose custom versions
-        lammps-sm90 = lammpsWithConfig { cudaArch = "sm_90"; kokkosCudaArch = "hopper90"; };
-        lammps-sm80 = lammpsWithConfig { cudaArch = "sm_80"; kokkosCudaArch = "ampere80"; };
-        lammps-sm75 = lammpsWithConfig { cudaArch = "sm_75"; kokkosCudaArch = "turing75"; };
-        lammps-sm70 = lammpsWithConfig { cudaArch = "sm_70"; kokkosCudaArch = "volta70"; };
-      };
-      packages.aarch64-darwin = {
-        default = lammps {
-          system = "aarch64-darwin";
+      packages.x86_64-linux =
+        let
+          pkgs = pkgsFor {
+            system = "x86_64-linux";
+            enableCUDA = true;
+          };
+          gpuOptions = cudaArch: [
+            "GPU_ARCH=${cudaArch?"sm_61"}"
+            "GPU_API=CUDA"
+            "CUDA_MPS_SUPPORT=on"
+          ];
+          setKokkosOptions = kokkosCudaArch: with pkgs.lib;[
+            (cmakeBool "Kokkos_ENABLE_OPENMP" true)
+            (cmakeBool "Kokkos_ENABLE_CUDA" true)
+            (cmakeBool "Kokkos_ARCH_${strings.toUpper kokkosCudaArch ? "pascal61"}" true)
+            (cmakeBool "Kokkos_ARCH_NATIVE" true)
+          ];
+        in
+        {
+          default = lammpsWithConfig rec {
+            enableCUDA = true;
+            cudaArch = "sm_61";
+            kokkosCudaArch = "pascal61";
+            gpuExtraOptions = gpuOptions cudaArch;
+            kokkosOptions = setKokkosOptions kokkosCudaArch;
+            pkgs = pkgs;
+          };
         };
-      };
-
-      # Overlay for reuse
-      overlays.default = overlay;
-
-      # Example usage in other flakes:
-      # Let users customize via overlay
-      apps.${system} = {
-        # Example app that uses custom configuration
-        lammps = {
-          type = "app";
-          program = "${lammps}/bin/lmp";
+      packages.aarch64-darwin =
+        let
+          pkgs = pkgsFor {
+            system = "aarch64-darwin";
+            enableCUDA = false;
+          };
+          gpuExtraOptions = [
+            "GPU_API=opencl"
+          ];
+          kokkosOptions = with pkgs.lib; [
+            (cmakeBool "Kokkos_ENABLE_OPENMP" true)
+            (cmakeBool "Kokkos_ARCH_NATIVE" true)
+          ];
+        in
+        {
+          default = lammpsWithConfig {
+            system = "aarch64-darwin";
+            enableCUDA = false;
+            cudaArch = null;
+            kokkosCudaArch = null;
+            inherit gpuExtraOptions;
+            inherit kokkosOptions;
+            inherit pkgs;
+          };
         };
+      overlays.default = final: prev: {
+        lammps = lammpsWithConfig;
       };
     };
 }
+
+#   # Create the default package with default configuration
+#   lammps = lammpsWithConfig { };
+
+#   # Create a more flexible overlay that allows configuration
+#   overlay = final: prev: {
+#     lammps = lammps;
+#     lammpsCustom = lammpsWithConfig;
+#   };
+# in
+# {
+#   packages.x86_64-linux = {
+#     default = lammps;
+#     # You can also expose custom versions
+#     lammps-sm90 = lammpsWithConfig { cudaArch = "sm_90"; kokkosCudaArch = "hopper90"; };
+#     lammps-sm80 = lammpsWithConfig { cudaArch = "sm_80"; kokkosCudaArch = "ampere80"; };
+#     lammps-sm75 = lammpsWithConfig { cudaArch = "sm_75"; kokkosCudaArch = "turing75"; };
+#     lammps-sm70 = lammpsWithConfig { cudaArch = "sm_70"; kokkosCudaArch = "volta70"; };
+#   };
+#   packages.aarch64-darwin = {
+#     default = lammps {
+#       system = "aarch64-darwin";
+#     };
+#   };
+
+#   # Overlay for reuse
+#   overlays.default = overlay;
+
+#   # Example usage in other flakes:
+#   # Let users customize via overlay
+#   apps.${system} = {
+#     # Example app that uses custom configuration
+#     lammps = {
+#       type = "app";
+#       program = "${lammps}/bin/lmp";
+#     };
+#   };
+# };
