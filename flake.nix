@@ -5,10 +5,11 @@
   };
   outputs = { nixpkgs, ... }:
     let
-      pkgsFor = { system, enableCUDA }: import nixpkgs {
+      pkgsFor = { system, enableCUDA, overlays ? [ ] }: import nixpkgs {
         inherit system;
         config.allowUnfree = true;
         config.cudaSupport = enableCUDA;
+        inherit overlays;
       };
     in
     {
@@ -17,6 +18,17 @@
           pkgs = pkgsFor {
             system = "x86_64-linux";
             enableCUDA = true;
+            overlays = [
+              (final: prev: {
+                mpi = prev.mpi.overrideAttrs {
+                  configureFlags = prev.mpi.configureFlags ++ [
+                    "--with-ucx=${pkgs.lib.getDev pkgs.ucx}"
+                    "--with-ucx-libdir=${pkgs.lib.getLib pkgs.ucx}/lib"
+                    "--enable-mca-no-build=btl-uct"
+                  ];
+                };
+              })
+            ];
           };
         in
         {
@@ -26,7 +38,7 @@
             kokkosGpuArch = "pascal61";
           };
           sm_90 = pkgs.callPackage ./package.nix {
-            enableCUDA = true;
+            cudaSupport = true;
             gpuArch = "sm_90";
             kokkosGpuArch = "hopper90";
           };
@@ -42,6 +54,9 @@
           default = pkgs.callPackage ./package.nix {
             cudaSupport = false;
             gpuApi = "opencl";
+            gpuArch = null;
+            kokkosGpuArch = null;
+            useGcc = false;
           };
         };
     };
