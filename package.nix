@@ -31,7 +31,7 @@
   ]
 , gpuApi ? "CUDA"
 , gpuArch
-, kokkosGpuarch
+, kokkosGpuArch
 , useGcc ? true
 , fetchFromGitHub
 , cmake
@@ -146,7 +146,7 @@ stdenv.mkDerivation rec {
   ++
   (lib.optionals cudaSupport
     [
-      (lib.cmakeBool "Kokkos_ARCH_${lib.strings.toUpper kokkosGpuarch}" true)
+      (lib.cmakeBool "Kokkos_ARCH_${lib.strings.toUpper kokkosGpuArch}" true)
       (lib.cmakeOptionType "string" "FFT_KOKKOS" "CUFFT")
       (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/lib/kokkos/bin/nvcc_wrapper")
       (lib.cmakeOptionType "string" "CMAKE_CXX_FLAGS" "-Wno-deprecated-gpu-targets")

@@ -23,7 +23,7 @@
           default = pkgs.callPackage ./package.nix {
             cudaSupport = true;
             gpuArch = "sm_61";
-            kokkosGpuarch = "pascal61";
+            kokkosGpuArch = "pascal61";
           };
           sm_90 = pkgs.callPackage ./package.nix {
             enableCUDA = true;
