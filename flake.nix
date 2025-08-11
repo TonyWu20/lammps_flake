@@ -254,5 +254,8 @@
             inherit pkgs;
           };
         };
+      overlays.default = final: prev: {
+        lammpsWithConfig = lammpsWithConfig;
+      };
     };
 }
