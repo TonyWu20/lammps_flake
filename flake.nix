@@ -256,7 +256,7 @@
           };
         };
       overlays.default = final: prev: {
-        lammpsWithConfig = lammpsWithConfig;
+        final.lammpsWithConfig = lammpsWithConfig;
       };
     };
 }
