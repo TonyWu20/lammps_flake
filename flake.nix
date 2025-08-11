@@ -10,188 +10,6 @@
         config.allowUnfree = true;
         config.cudaSupport = enableCUDA;
       };
-      lmpPackages = [
-        "asphere"
-        "body"
-        "class2"
-        "colloid"
-        "compress"
-        "coreshell"
-        "dipole"
-        "granular"
-        "kspace"
-        "manybody"
-        "mc"
-        "misc"
-        "molecule"
-        "opt"
-        "peri"
-        "qeq"
-        "replica"
-        "rigid"
-        "shock"
-        "srd"
-        "kokkos"
-        "extra-fix"
-        "meam"
-        "reaxff"
-        "gpu"
-        "openmp"
-      ];
-      lammpsWithConfig =
-        { system ? "x86_64-linux"
-        , enableCUDA ? true
-        , cudaArch ? "sm_61"
-        , kokkosCudaArch ? "pascal_61"
-        , packages ? lmpPackages
-        , gpuExtraOptions
-        , kokkosOptions
-        , pkgs
-        , ...
-        }:
-        pkgs.stdenv.mkDerivation rec {
-          pname = "lammps";
-          version = "stable_22Jul2025";
-
-          src = pkgs.fetchFromGitHub {
-            owner = "lammps";
-            repo = "lammps";
-            rev = version;
-            sha256 = "h2eh7AAiesS8ORXLwyipwYZcKvB5cybFzqmhBMfzVBU=";
-          };
-
-          sourceRoot = "./source";
-
-          nativeBuildInputs = with pkgs; [
-            cmake
-            gitMinimal
-            pkg-config
-          ] ++
-          (lib.optionals enableCUDA [
-            cudaPackages.cudatoolkit
-            cudaPackages.cuda_nvcc
-            autoAddDriverRunpath
-            makeWrapper
-          ]) ++
-          (lib.optionals (system == "x86_64-linux") [
-            mpi
-          ])
-          ++ (
-            lib.optionals (system == "aarch64-darwin") [
-              mpi
-              llvmPackages.openmp
-              darwin.DarwinTools
-            ]
-          )
-          ;
-
-          buildInputs = with pkgs; [
-            fftw
-            lapack
-            blas
-            python313
-            zlib
-            zstd
-          ] ++
-          (lib.optionals enableCUDA [
-            cudaPackages.cudatoolkit
-            cudaPackages.cuda_cudart
-            cudaPackages.libcufft
-          ]
-          );
-          propagatedBuildInputs = with pkgs; [
-            fftw
-            lapack
-            blas
-          ] ++
-          (lib.optionals enableCUDA [
-            cudaPackages.cudatoolkit
-            cudaPackages.cuda_cudart
-            cudaPackages.libcufft
-          ]
-          ) ++
-          (lib.optionals (system == "x86_64-linux") [
-            mpi
-          ]) ++
-          (lib.optionals (system == "aarch64-darwin") [
-            llvmPackages.openmp
-          ])
-          ;
-
-          cmakeDir = "../cmake";
-
-          enableParallelBuilding = true;
-
-          phases = [ "unpackPhase" "patchPhase" "configurePhase" "buildPhase" "fixupPhase" ];
-
-          # Convert package list to cmake flags
-          packageFlags = builtins.map (pkg: pkgs.lib.cmakeBool "PKG_${(pkgs.lib.strings.toUpper pkg)}" true) packages;
-
-          # Convert gpu options to cmake flags
-          gpuFlags = builtins.map (opt: "-D${opt}") gpuExtraOptions;
-
-          # Convert kokkos options to cmake flags  
-          kokkosFlags = with pkgs; kokkosOptions
-            ++
-            (lib.optionals enableCUDA
-              [
-                (lib.cmakeOptionType "string" "FFT_KOKKOS" "CUFFT")
-                (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/lib/kokkos/bin/nvcc_wrapper")
-                (lib.cmakeOptionType "string" "CMAKE_CXX_FLAGS" "-Wno-deprecated-gpu-targets")
-              ]);
-
-          # Combine all flags
-          cmakeFlags = with pkgs;packageFlags ++ gpuFlags ++ kokkosFlags ++ [
-            (lib.cmakeBool "BUILD_SHARED_LIBS" true)
-            (lib.cmakeBool "BUILD_OMP" true)
-          ];
-
-          env = {
-            NIX_ENFORCE_NO_NATIVE = 0;
-          } //
-          (pkgs.lib.optionalAttrs enableCUDA {
-            CUDA_PATH = "${pkgs.cudaPackages.cudatoolkit}";
-            CUDA_HOME = "${pkgs.cudaPackages.cudatoolkit}";
-            LD_LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudatoolkit}/lib64:$LD_LIBRARY_PATH";
-            LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudatoolkit}/lib64:$LIBRARY_PATH";
-            PATH = "${pkgs.cudaPackages.cudatoolkit}/bin:$PATH";
-          }
-          );
-          cudaLibs = with pkgs;
-            (lib.optionals enableCUDA [
-              cudaPackages.cuda_cudart
-              cudaPackages.libcufft
-            ]);
-          wrapperOptions = with pkgs;[
-            # ollama embeds llama-cpp binaries which actually run the ai models
-            # these llama-cpp binaries are unaffected by the ollama binary's DT_RUNPATH
-            # LD_LIBRARY_PATH is temporarily required to use the gpu
-            # until these llama-cpp binaries can have their runpath patched
-            "--suffix LD_LIBRARY_PATH : '${addDriverRunpath.driverLink}/lib'"
-            "--suffix LD_LIBRARY_PATH : '${lib.makeLibraryPath (map lib.getLib cudaLibs)}'"
-          ];
-          wrapperArgs = builtins.concatStringsSep " " wrapperOptions;
-
-          patchPhase = ''
-            patchShebangs --build /build/source/lib/kokkos/bin/*
-          '';
-
-          buildPhase = ''
-            #runHook preBuild
-            cmake --build . --target install -j$NIX_BUILD_CORES
-            #runHook postBuild
-          '';
-
-          postFixup =
-            ''
-              ${pkgs.lib.optionalString enableCUDA
-                 # expose runtime libraries necessary to use the gpu
-                 ''
-                   wrapProgram "$out/bin/lmp" ${wrapperArgs}
-                 ''
-              }
-            '';
-        };
     in
     {
       packages.x86_64-linux =
@@ -200,34 +18,17 @@
             system = "x86_64-linux";
             enableCUDA = true;
           };
-          gpuOptions = cudaArch: [
-            "GPU_ARCH=${cudaArch}"
-            "GPU_API=CUDA"
-            "CUDA_MPS_SUPPORT=on"
-          ];
-          setKokkosOptions = kokkosCudaArch: with pkgs.lib;[
-            (cmakeBool "Kokkos_ENABLE_OPENMP" true)
-            (cmakeBool "Kokkos_ENABLE_CUDA" true)
-            (cmakeBool "Kokkos_ARCH_${strings.toUpper kokkosCudaArch}" true)
-            (cmakeBool "Kokkos_ARCH_NATIVE" true)
-          ];
         in
         {
-          default = lammpsWithConfig rec {
-            enableCUDA = true;
-            cudaArch = "sm_61";
-            kokkosCudaArch = "pascal61";
-            gpuExtraOptions = gpuOptions cudaArch;
-            kokkosOptions = setKokkosOptions kokkosCudaArch;
-            inherit pkgs;
+          default = pkgs.callPackage ./package.nix {
+            cudaSupport = true;
+            gpuArch = "sm_61";
+            kokkosGpuarch = "pascal61";
           };
-          sm_90 = lammpsWithConfig rec {
+          sm_90 = pkgs.callPackage ./package.nix {
             enableCUDA = true;
-            cudaArch = "sm_90";
-            kokkosCudaArch = "hopper90";
-            gpuExtraOptions = gpuOptions cudaArch;
-            kokkosOptions = setKokkosOptions kokkosCudaArch;
-            inherit pkgs;
+            gpuArch = "sm_90";
+            kokkosGpuArch = "hopper90";
           };
         };
       packages.aarch64-darwin =
@@ -236,27 +37,12 @@
             system = "aarch64-darwin";
             enableCUDA = false;
           };
-          gpuExtraOptions = [
-            "GPU_API=opencl"
-          ];
-          kokkosOptions = with pkgs.lib; [
-            (cmakeBool "Kokkos_ENABLE_OPENMP" true)
-            (cmakeBool "Kokkos_ARCH_NATIVE" true)
-          ];
         in
         {
-          default = lammpsWithConfig {
-            system = "aarch64-darwin";
-            enableCUDA = false;
-            cudaArch = null;
-            kokkosCudaArch = null;
-            inherit gpuExtraOptions;
-            inherit kokkosOptions;
-            inherit pkgs;
+          default = pkgs.callPackage ./package.nix {
+            cudaSupport = false;
+            gpuApi = "opencl";
           };
         };
-      overlays.default = final: prev: {
-        final.lammpsWithConfig = lammpsWithConfig;
-      };
     };
 }
