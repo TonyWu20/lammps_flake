@@ -147,6 +147,7 @@ stdenv.mkDerivation rec {
   (lib.optionals cudaSupport
     [
       (lib.cmakeBool "Kokkos_ARCH_${lib.strings.toUpper kokkosGpuArch}" true)
+      (lib.cmakeBool "Kokkos_ENABLE_CUDA" true)
       (lib.cmakeOptionType "string" "FFT_KOKKOS" "CUFFT")
       (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/lib/kokkos/bin/nvcc_wrapper")
       (lib.cmakeOptionType "string" "CMAKE_CXX_FLAGS" "-Wno-deprecated-gpu-targets")
