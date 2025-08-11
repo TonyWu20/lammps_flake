@@ -78,6 +78,7 @@
           ])
           ++ (
             lib.optionals (system == "aarch64-darwin") [
+              mpi
               llvmPackages.openmp
               darwin.DarwinTools
             ]
