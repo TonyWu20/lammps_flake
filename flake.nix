@@ -42,6 +42,8 @@
             gpuArch = "sm_90";
             kokkosGpuArch = "hopper90";
           };
+          # test
+          # voro = pkgs.callPackage ./voro++ { };
         };
       packages.aarch64-darwin =
         let

@@ -28,6 +28,7 @@
     "reaxff"
     "gpu"
     "openmp"
+    "voronoi"
   ]
 , gpuApi ? "CUDA"
 , gpuArch
@@ -50,7 +51,11 @@
 , zlib
 , zstd
 , addDriverRunpath
+, pkgs
 }:
+let
+  voro = pkgs.callPackage ./voro++ { };
+in
 
 stdenv.mkDerivation rec {
   pname = "lammps";
@@ -63,12 +68,14 @@ stdenv.mkDerivation rec {
     sha256 = "h2eh7AAiesS8ORXLwyipwYZcKvB5cybFzqmhBMfzVBU=";
   };
 
-  sourceRoot = "./source";
+
+  # sourceRoot = "./source";
 
   nativeBuildInputs = [
     cmake
     gitMinimal
     pkg-config
+    voro
   ] ++
   (lib.optionals cudaSupport [
     cudaPackages.cudatoolkit
@@ -157,6 +164,8 @@ stdenv.mkDerivation rec {
   cmakeFlags = packageFlags ++ gpuFlags ++ kokkosFlags ++ [
     (lib.cmakeBool "BUILD_SHARED_LIBS" true)
     (lib.cmakeBool "BUILD_OMP" true)
+    (lib.cmakeOptionType "filepath" "VORO_LIBRARY" "${voro}/lib/libvoro++.a")
+    (lib.cmakeOptionType "path" "VORO_INCLUDE_DIR" "${voro}/include/voro++")
   ];
 
   env = {
@@ -168,6 +177,7 @@ stdenv.mkDerivation rec {
     LD_LIBRARY_PATH = "${cudaPackages.cudatoolkit}/lib:${cudaPackages.cudatoolkit}/lib64:$LD_LIBRARY_PATH";
     LIBRARY_PATH = "${cudaPackages.cudatoolkit}/lib:${cudaPackages.cudatoolkit}/lib64:$LIBRARY_PATH";
     PATH = "${cudaPackages.cudatoolkit}/bin:$PATH";
+    # CXX = "/build/source/lib/kokkos/bin/nvcc_wrapper";
   }
   );
   cudaLibs =
@@ -190,9 +200,7 @@ stdenv.mkDerivation rec {
   '';
 
   buildPhase = ''
-    #runHook preBuild
     cmake --build . --target install -j$NIX_BUILD_CORES
-    #runHook postBuild
   '';
 
   postFixup =
