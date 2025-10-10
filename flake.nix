@@ -3,7 +3,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
   };
-  outputs = { nixpkgs, ... }:
+  outputs = { self, nixpkgs, ... }:
     let
       pkgsFor = { system, enableCUDA, overlays ? [ ] }: import nixpkgs {
         inherit system;
@@ -59,6 +59,34 @@
             gpuArch = null;
             kokkosGpuArch = null;
             useGcc = false;
+          };
+        };
+      devShells.x86_64-linux =
+        let
+          pkgs = pkgsFor {
+            system = "x86_64-linux";
+            enableCUDA = true;
+            overlays = [
+              (final: prev: {
+                mpi = prev.mpi.overrideAttrs {
+                  configureFlags = prev.mpi.configureFlags ++ [
+                    "--with-ucx=${pkgs.lib.getDev pkgs.ucx}"
+                    "--with-ucx-libdir=${pkgs.lib.getLib pkgs.ucx}/lib"
+                    "--enable-mca-no-build=btl-uct"
+                  ];
+                };
+              })
+            ];
+          };
+        in
+        {
+          default = pkgs.mkShell {
+            packages = [
+              self.packages.x86_64-linux.default
+            ];
+            env = {
+              OMP_NUM_THREAD = 1;
+            };
           };
         };
     };
