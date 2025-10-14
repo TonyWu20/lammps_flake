@@ -24,6 +24,7 @@
     "srd"
     "kokkos"
     "extra-fix"
+    "extra-pair"
     "meam"
     "reaxff"
     "gpu"
