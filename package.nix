@@ -9,6 +9,8 @@
     "compress"
     "coreshell"
     "dipole"
+    "dielectric"
+    "electrode"
     "granular"
     "kspace"
     "manybody"
