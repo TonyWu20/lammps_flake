@@ -25,6 +25,7 @@
     "shock"
     "srd"
     "kokkos"
+    "kim"
     "extra-fix"
     "extra-pair"
     "meam"
@@ -32,6 +33,7 @@
     "gpu"
     "openmp"
     "voronoi"
+    "echemdid"
   ]
 , gpuApi ? "CUDA"
 , gpuArch
@@ -55,6 +57,7 @@
 , zstd
 , addDriverRunpath
 , pkgs
+, kim
 }:
 let
   voro = pkgs.callPackage ./voro++ { };
@@ -64,15 +67,25 @@ stdenv.mkDerivation rec {
   pname = "lammps";
   version = "stable_22Jul2025";
 
-  src = fetchFromGitHub {
-    owner = "lammps";
-    repo = "lammps";
-    rev = version;
-    sha256 = "h2eh7AAiesS8ORXLwyipwYZcKvB5cybFzqmhBMfzVBU=";
-  };
+  srcs = [
+    (fetchFromGitHub {
+      owner = "lammps";
+      repo = "lammps";
+      rev = version;
+      name = "lammps";
+      sha256 = "h2eh7AAiesS8ORXLwyipwYZcKvB5cybFzqmhBMfzVBU=";
+    })
+    (fetchFromGitHub {
+      owner = "TonyWu20";
+      repo = "lammps-hacks-public";
+      rev = "master";
+      name = "echemdid";
+      sha256 = "r9In1Z9anSLUyxrWCboLrne9Vvp2LGEzrBWCZ4EiwZg=";
+    })
+  ];
 
 
-  # sourceRoot = "./source";
+  sourceRoot = pname;
 
   nativeBuildInputs = [
     cmake
@@ -135,6 +148,13 @@ stdenv.mkDerivation rec {
 
   enableParallelBuilding = true;
 
+  postPatch = ''
+    mkdir src/ECHEMDID
+    cp ../echemdid/EChemDID-22July2025/fix_echemdid* src/ECHEMDID/
+    cp ../echemdid/EChemDID-22July2025/fix_qeq* src/QEQ/
+    sed -i "300i ECHEMDID" cmake/CMakeLists.txt
+    echo "Add ECHEMDID and patch qeq"
+  '';
   phases = [ "unpackPhase" "patchPhase" "configurePhase" "buildPhase" "fixupPhase" ];
 
   # Convert package list to cmake flags
@@ -159,7 +179,7 @@ stdenv.mkDerivation rec {
       (lib.cmakeBool "Kokkos_ARCH_${lib.strings.toUpper kokkosGpuArch}" true)
       (lib.cmakeBool "Kokkos_ENABLE_CUDA" true)
       (lib.cmakeOptionType "string" "FFT_KOKKOS" "CUFFT")
-      (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/source/lib/kokkos/bin/nvcc_wrapper")
+      (lib.cmakeOptionType "filepath" "CMAKE_CXX_COMPILER" "/build/lammps/lib/kokkos/bin/nvcc_wrapper")
       (lib.cmakeOptionType "string" "CMAKE_CXX_FLAGS" "-Wno-deprecated-gpu-targets")
     ]);
 
@@ -169,10 +189,12 @@ stdenv.mkDerivation rec {
     (lib.cmakeBool "BUILD_OMP" true)
     (lib.cmakeOptionType "filepath" "VORO_LIBRARY" "${voro}/lib/libvoro++.a")
     (lib.cmakeOptionType "path" "VORO_INCLUDE_DIR" "${voro}/include/voro++")
+    (lib.cmakeBool "DOWNLOAD_KIM" false)
   ];
 
   env = {
     NIX_ENFORCE_NO_NATIVE = 0;
+    KIM-API_DIR = "${kim}/share/cmake/kim-api/";
   } //
   (lib.optionalAttrs cudaSupport {
     CUDA_PATH = "${cudaPackages.cudatoolkit}";
@@ -180,6 +202,7 @@ stdenv.mkDerivation rec {
     LD_LIBRARY_PATH = "${cudaPackages.cudatoolkit}/lib:${cudaPackages.cudatoolkit}/lib64:$LD_LIBRARY_PATH";
     LIBRARY_PATH = "${cudaPackages.cudatoolkit}/lib:${cudaPackages.cudatoolkit}/lib64:$LIBRARY_PATH";
     PATH = "${cudaPackages.cudatoolkit}/bin:$PATH";
+    PKG_CONFIG_PATH = "${kim}/lib/pkgconfig/";
     # CXX = "/build/source/lib/kokkos/bin/nvcc_wrapper";
   }
   );
@@ -199,7 +222,9 @@ stdenv.mkDerivation rec {
   wrapperArgs = builtins.concatStringsSep " " wrapperOptions;
 
   patchPhase = ''
-    patchShebangs --build /build/source/lib/kokkos/bin/*
+    patchShebangs --build /build/lammps/lib/kokkos/bin/*
+    patchShebangs --build ${kim}/bin/
+    runHook postPatch
   '';
 
   buildPhase = ''

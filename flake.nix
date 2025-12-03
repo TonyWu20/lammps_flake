@@ -2,8 +2,9 @@
   description = "LAMMPS with configurable CUDA support";
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    kim-api.url = "github:TonyWu20/kim-api-nix";
   };
-  outputs = { self, nixpkgs, ... }:
+  outputs = { self, nixpkgs, kim-api, ... }:
     let
       pkgsFor = { system, enableCUDA, overlays ? [ ] }: import nixpkgs {
         inherit system;
@@ -11,6 +12,7 @@
         config.cudaSupport = enableCUDA;
         inherit overlays;
       };
+      kim = kim-api.packages.x86_64-linux.default;
     in
     {
       packages.x86_64-linux =
@@ -36,11 +38,13 @@
             cudaSupport = true;
             gpuArch = "sm_61";
             kokkosGpuArch = "pascal61";
+            inherit kim;
           };
           sm_90 = pkgs.callPackage ./package.nix {
             cudaSupport = true;
             gpuArch = "sm_90";
             kokkosGpuArch = "hopper90";
+            inherit kim;
           };
           # test
           # voro = pkgs.callPackage ./voro++ { };
@@ -83,10 +87,11 @@
           default = pkgs.mkShell {
             packages = [
               self.packages.x86_64-linux.default
+              kim
             ];
-            env = {
-              OMP_NUM_THREAD = 1;
-            };
+            shellHook = ''
+              export KIM_API_DIR="${kim}/share/cmake/kim-api"
+            '';
           };
         };
     };
