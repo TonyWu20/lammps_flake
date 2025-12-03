@@ -218,6 +218,7 @@ stdenv.mkDerivation rec {
     # until these llama-cpp binaries can have their runpath patched
     "--suffix LD_LIBRARY_PATH : '${addDriverRunpath.driverLink}/lib'"
     "--suffix LD_LIBRARY_PATH : '${lib.makeLibraryPath (map lib.getLib cudaLibs)}'"
+    "--suffix LD_LIBRARY_PATH : '${lib.getLib kim}/lib'"
   ];
   wrapperArgs = builtins.concatStringsSep " " wrapperOptions;
 
