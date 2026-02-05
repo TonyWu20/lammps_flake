@@ -94,5 +94,19 @@
             '';
           };
         };
+      devShells.aarch64-darwin =
+        let
+          pkgs = pkgsFor {
+            system = "aarch64-darwin";
+            enableCUDA = false;
+          };
+        in
+        {
+          default = pkgs.mkShell {
+            packages = [
+              self.packages.aarch64-darwin.default
+            ];
+          };
+        };
     };
 }

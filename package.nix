@@ -25,7 +25,7 @@
     "shock"
     "srd"
     "kokkos"
-    "kim"
+    #   "kim"
     "extra-fix"
     "extra-pair"
     "meam"
@@ -33,7 +33,6 @@
     "gpu"
     "openmp"
     "voronoi"
-    "echemdid"
   ]
 , gpuApi ? "CUDA"
 , gpuArch
@@ -57,7 +56,9 @@
 , zstd
 , addDriverRunpath
 , pkgs
-, kim
+  # kim
+, fetchurl
+, gcc
 }:
 let
   voro = pkgs.callPackage ./voro++ { };
@@ -65,27 +66,12 @@ in
 
 stdenv.mkDerivation rec {
   pname = "lammps";
-  version = "stable_22Jul2025";
+  version = "stable_22Jul2025_update3";
 
-  srcs = [
-    (fetchFromGitHub {
-      owner = "lammps";
-      repo = "lammps";
-      rev = version;
-      name = "lammps";
-      sha256 = "h2eh7AAiesS8ORXLwyipwYZcKvB5cybFzqmhBMfzVBU=";
-    })
-    (fetchFromGitHub {
-      owner = "TonyWu20";
-      repo = "lammps-hacks-public";
-      rev = "master";
-      name = "echemdid";
-      sha256 = "r9In1Z9anSLUyxrWCboLrne9Vvp2LGEzrBWCZ4EiwZg=";
-    })
-  ];
-
-
-  sourceRoot = pname;
+  src = fetchurl {
+    url = "https://github.com/lammps/lammps/releases/download/stable_22Jul2025_update3/lammps-src-22Jul2025_update3.tar.gz";
+    hash = "sha256-FxD0WytepwkKUazY7L71QN8GxT5PunV3Xy7vNGjYeGc=";
+  };
 
   nativeBuildInputs = [
     cmake
@@ -141,6 +127,7 @@ stdenv.mkDerivation rec {
   ]) ++
   (lib.optionals (useGcc == false) [
     llvmPackages.openmp
+    mpi
   ])
   ;
 
@@ -148,13 +135,6 @@ stdenv.mkDerivation rec {
 
   enableParallelBuilding = true;
 
-  postPatch = ''
-    mkdir src/ECHEMDID
-    cp ../echemdid/EChemDID-22July2025/fix_echemdid* src/ECHEMDID/
-    cp ../echemdid/EChemDID-22July2025/fix_qeq* src/QEQ/
-    sed -i "300i ECHEMDID" cmake/CMakeLists.txt
-    echo "Add ECHEMDID and patch qeq"
-  '';
   phases = [ "unpackPhase" "patchPhase" "configurePhase" "buildPhase" "fixupPhase" ];
 
   # Convert package list to cmake flags
@@ -194,7 +174,7 @@ stdenv.mkDerivation rec {
 
   env = {
     NIX_ENFORCE_NO_NATIVE = 0;
-    KIM-API_DIR = "${kim}/share/cmake/kim-api/";
+    #KIM-API_DIR = "${kim}/share/cmake/kim-api/";
   } //
   (lib.optionalAttrs cudaSupport {
     CUDA_PATH = "${cudaPackages.cudatoolkit}";
@@ -202,7 +182,7 @@ stdenv.mkDerivation rec {
     LD_LIBRARY_PATH = "${cudaPackages.cudatoolkit}/lib:${cudaPackages.cudatoolkit}/lib64:$LD_LIBRARY_PATH";
     LIBRARY_PATH = "${cudaPackages.cudatoolkit}/lib:${cudaPackages.cudatoolkit}/lib64:$LIBRARY_PATH";
     PATH = "${cudaPackages.cudatoolkit}/bin:$PATH";
-    PKG_CONFIG_PATH = "${kim}/lib/pkgconfig/";
+    #PKG_CONFIG_PATH = "${kim}/lib/pkgconfig/";
     # CXX = "/build/source/lib/kokkos/bin/nvcc_wrapper";
   }
   );
@@ -218,15 +198,15 @@ stdenv.mkDerivation rec {
     # until these llama-cpp binaries can have their runpath patched
     "--suffix LD_LIBRARY_PATH : '${addDriverRunpath.driverLink}/lib'"
     "--suffix LD_LIBRARY_PATH : '${lib.makeLibraryPath (map lib.getLib cudaLibs)}'"
-    "--suffix LD_LIBRARY_PATH : '${lib.getLib kim}/lib'"
+    #"--suffix LD_LIBRARY_PATH : '${lib.getLib kim}/lib'"
   ];
   wrapperArgs = builtins.concatStringsSep " " wrapperOptions;
 
   patchPhase = ''
     patchShebangs --build /build/lammps/lib/kokkos/bin/*
-    patchShebangs --build ${kim}/bin/
     runHook postPatch
   '';
+  #patchShebangs --build ${kim}/bin/
 
   buildPhase = ''
     cmake --build . --target install -j$NIX_BUILD_CORES
